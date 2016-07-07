@@ -1,0 +1,500 @@
+#!/bin/bash
+##################################################################
+#
+# Oracle2GP安装脚本   
+#
+##################################################################
+set -e
+PWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source $PWD/os_path.sh
+configFile=$OSHOME/config.properties
+myHost=`hostname`
+installLog=$OSHOME/log/install.log
+installSQLLog=$OSHOME/log/install_sql.log
+
+clear
+exec > >(tee $installLog)
+
+echo "##############################################################################################"
+echo "Oracle2GP installer"
+echo "##############################################################################################"
+echo ""
+
+d=`date +"%Y-%m-%d %H:%M:%S"`
+echo ""
+echo "Installation started at: $d"
+echo "Installation started at: $d" > $installSQLLog
+echo ""
+echo "##############################################################################################"
+echo "Reading the default ports from $OSHOME/os_path.sh"
+echo "User UI Interface (UIPORT): $UIPORT"
+echo "gpfdist ports:"
+echo "	OSPORT: $OSPORT"
+echo "	Note: Do not overlap with OSPORT or CUSTOM port ranges!!"
+echo "	OSPORT_LOWER: $OSPORT_LOWER"
+echo "	OSPORT_UPPER: $OSPORT_UPPER"
+echo "	Note: Do not overlap with OSPORT or JOB port ranges!!"
+echo "	OSPORT_CUSTOM_LOWER: $OSPORT_CUSTOM_LOWER"
+echo "	OSPORT_CUSTOM_UPPER: $OSPORT_CUSTOM_UPPER"
+echo ""
+echo "If either of these ports are not acceptable, cancel the installer.  Next, edit"
+echo "$OSHOME/os_path.sh then re-run the installer."
+echo ""
+echo "If you need to change these values after installation, be sure to re-run this installer."
+echo "##############################################################################################"
+echo ""
+read -p "Press [Enter] to start continue or ctrl+c to cancel..."
+echo ""
+
+echo "##############################################################################################"
+echo "Checking prerequisites"
+echo "##############################################################################################"
+echo ""
+echo "[Step1]: Checking for psql..."
+gpclient=`psql --version 2> /dev/null | grep PostgreSQL | grep 8.2 | wc -l`
+	if [ $gpclient -eq 0 ]; then
+		echo "psql not found.  Please install the Greenplum/HAWQ client and try again."
+		echo "##############################################################################################"
+		echo "Installation failed!"
+		echo "##############################################################################################"
+		exit 1
+	else
+        t_psql=`psql --version 2> /dev/null | grep PostgreSQL | grep 8.2`
+		echo "psql exist: ${t_psql}"
+	fi
+echo "[Step1]: Successful"
+echo ""
+
+echo "[Step2]: Checking for gpfdist..."
+gpfdistclient=`gpfdist --version 2> /dev/null | wc -l`
+	if [ $gpfdistclient -eq 0 ]; then
+		echo "gpfdist not found.  Please install the Greenplum/HAWQ gpfdist utility and try again."
+		echo "##############################################################################################"
+		echo "Installation failed!"
+		echo "##############################################################################################"
+		exit 1
+	else
+        t_gpfdist=`gpfdist --version 2> /dev/null`
+		echo "gpfdist exist: ${t_gpfdist}"
+	fi
+echo "[Step2]: Successful"
+echo ""
+
+if [ ! -f $OJAR ]; then
+	echo "##############################################################################################"
+	echo "Oracle JDBC driver is missing."
+	echo "- Download ojdbc6.jar from "
+	echo "  http://www.oracle.com/technetwork/database/enterprise-edition/jdbc-112010-090769.html"
+	echo "- Place the ojdbc6.jar file in $OSHOME/jar directory"
+	echo "- Restart Oracle2GP"
+	echo "Note: You can rename the jar file but be sure to set this value with OJAR in:"
+	echo "$OSHOME/os_path.sh"
+	echo "##############################################################################################"
+	echo ""
+	echo "##############################################################################################"
+	echo "Installation failed!"
+	echo "##############################################################################################"
+	exit 1
+fi
+
+VERSION=$(psql -v ON_ERROR_STOP=1 -t -A -c "SELECT CASE WHEN POSITION ('HAWQ 2' in version) > 0 THEN 'hawq_2' WHEN POSITION ('HAWQ 1' in version) > 0 THEN 'hawq_1' WHEN POSITION ('HAWQ' in version) = 0 AND POSITION ('Greenplum Database 4.2' IN version) > 0 THEN 'gpdb_4_2' WHEN POSITION ('HAWQ' in version) = 0 AND POSITION ('Greenplum Database 4.3' IN version) > 0 THEN 'gpdb_4_3' ELSE 'OTHER' END FROM version();")
+echo "Version: $VERSION"
+
+# re-config config.properties
+echo "oshome=$PWD" > $configFile
+echo ""
+echo "osport=$OSPORT" >> $configFile
+echo ""
+echo "##############################################################################################"
+echo "What is the name of THIS host?"
+echo "Note: This name MUST be accessible by ALL nodes on the private network via this name!"
+echo "Hit [enter] for the default of $myHost."
+echo "##############################################################################################"
+read osserver
+if [ "$osserver" = "" ]; then
+    # if osserver is null ,then the osserver is the local host
+	osserver=$myHost
+fi
+echo "osserver=$osserver" >> $configFile
+echo "osserver=$osserver"
+
+while [ -z $gpserver ]; do
+	echo "##############################################################################################"
+	echo "What is the name of the MASTER server running Greenplum or HAWQ?"
+	echo "##############################################################################################"
+	read gpserver
+	if [ "$gpserver" = "" ]; then
+		echo "Please provide a value."
+		echo ""
+	fi
+done
+echo "gpserver=$gpserver" >> $configFile
+echo "gpserver=$gpserver"
+
+echo "##############################################################################################"
+echo "Which database do you want to install Oracle2GP?"
+echo "Hit [enter] for the default of template1"
+echo "##############################################################################################"
+read gpdatabase
+if [ "$gpdatabase" = "" ]; then
+	gpdatabase=template1
+fi
+
+echo "gpdatabase=$gpdatabase" >> $configFile
+echo "gpdatabase=$gpdatabase"
+
+if [ "$gpdatabase" != "" ]; then
+	export PGDATABASE=$gpdatabase
+fi
+
+echo "##############################################################################################"
+echo "What is the port number of the MASTER server running Greenplum or HAWQ?"
+echo "Hit [enter] for the default of 5432."
+echo "##############################################################################################"
+read gpport
+if [ "$gpport" = "" ]; then
+	gpport=5432
+fi
+echo "gpport=$gpport" >> $configFile
+echo "gpport=$gpport"
+
+echo "##############################################################################################"
+echo "What is the username that Oracle2GP will use to connect Greenplum/HAWQ?  This needs to be a SUPERUSER."
+echo "Hit [enter] for the default of gpadmin"
+echo "##############################################################################################"
+read gpusername
+if [ "$gpusername" = "" ]; then
+	gpusername=gpadmin
+fi
+echo "gpusername=$gpusername" >> $configFile
+echo "gpusername=$gpusername"
+
+while [ -z $gppassword ]; do
+	echo "##############################################################################################"
+	echo "What is the database password (not the operating system password) for $gpusername?"
+	echo "##############################################################################################"
+	read gppassword
+	if [ "$gppassword" = "" ]; then
+		echo "Please provide a value."
+		echo ""
+	fi
+done
+echo "gppassword=$gppassword" >> $configFile
+echo "gppassword=********"
+
+echo "##############################################################################################"
+echo "Set the permissions on the config.properties file to 600"
+echo "##############################################################################################"
+chmod 600 $configFile
+echo ""
+
+echo "##############################################################################################"
+echo "Create/edit .pgpass file so psql can execute with a password"
+echo "##############################################################################################"
+echo "$gpserver:$gpport:$gpdatabase:$gpusername:$gppassword" > ~/.pgpass_os
+
+if [ -f ~/.pgpass ]; then
+	gpmon=`grep gpmon ~/.pgpass | wc -l`
+	if [ "$gpmon" -ge "1" ]; then
+		grep "gpmon" ~/.pgpass >> ~/.pgpass_os
+	fi
+	echo "Making new .pgpass file"
+	i=0
+	while [ -z $pgpass_backup ]; do
+		i=`expr $i + 1`
+		if [ ! -f ~/.pgpass_backup_$i ]; then
+			pgpass_backup=.pgpass_backup_$i
+		fi
+	done
+	echo "Backing up old .pgpass file to $pgpass_backup"
+	mv ~/.pgpass ~/$pgpass_backup
+	echo "Updating the .pgpass file"
+fi
+
+mv ~/.pgpass_os ~/.pgpass
+chmod 600 ~/.pgpass
+
+echo ""
+echo "##############################################################################################"
+echo "Update the .bash_profile file"
+echo "##############################################################################################"
+if [ -f ~/.bash_profile ]; then
+	echo "Making new .bash_profile file"
+	grep -v PGPORT ~/.bash_profile | grep -v os_path | grep -v PGDATABASE > ~/.bash_profile_os
+	i=0
+	while [ -z $bash_profile_backup ]; do
+		i=`expr $i + 1`
+		if [ ! -f ~/.bash_profile_backup_$i ]; then
+			bash_profile_backup=.bash_profile_backup_$i
+		fi
+	done
+	echo "Backing up old .bash_profile file to $bash_profile_backup"
+	mv ~/.bash_profile ~/$bash_profile_backup
+	echo "Updating the .bash_profile file"
+	mv ~/.bash_profile_os ~/.bash_profile
+fi
+echo ""
+echo "##############################################################################################"
+echo "Update the .bashrc file"
+echo "##############################################################################################"
+echo "Making new .bashrc file"
+grep -v os_path.sh ~/.bashrc > ~/.bashrc_os
+echo "Adding source to os_path.sh to your .bashrc file"
+echo "source $OSHOME/os_path.sh" >> ~/.bashrc_os
+i=0
+while [ -z $bashrc_backup ]; do
+    i=`expr $i + 1`
+    if [ ! -f ~/.bashrc_backup_$i ]; then
+        bashrc_backup=.bashrc_backup_$i
+    fi
+done
+echo "Backing up old .bashrc file to $bashrc_backup"
+mv ~/.bashrc ~/$bashrc_backup
+echo "Updating the .bashrc file"
+mv ~/.bashrc_os ~/.bashrc
+echo ""
+
+echo "##############################################################################################"
+echo "Validate database connection"
+echo "##############################################################################################"
+t=`psql -A -t -c "SELECT version()" -U $gpusername -d $gpdatabase -h $gpserver 2> /dev/null | wc -l`
+if [ $t -eq 1 ]; then
+	echo "Database connection test passed!"
+	echo ""
+else
+	echo ""
+	echo "Database connection failed!"
+	echo ""
+	echo "##############################################################################################"
+	echo "Be sure to allow external connections to connect to Greenplum/HAWQ that requires a password."
+	echo "If needed, edit your \$MASTER_DATA_DIRECTORY/pg_hba.conf file on the MASTER host of "
+	echo "Greenplum/HAWQ.  Add the following line to the bottom of the file:"
+	echo "host     all         all             0.0.0.0/0             md5"
+	echo ""
+	echo "Next, execute this so the updated pg_hba.conf file will used:"
+	echo "gpstop -u"
+	echo ""
+	echo "This will allow external connections to all databases but require a password to be provided."
+	echo ""
+	echo "Note: this password is NOT the operating system password.  By default, Greenplum and HAWQ"
+	echo "do not have a password set for the gpadmin account because it uses local \"trust\""
+	echo "authentication."
+	echo ""
+	echo "You can set the password for the database account with the following command:"
+	echo ""
+	echo "EXAMPLE: ALTER USER gpadmin PASSWORD 'changeme';"
+	echo "##############################################################################################"
+	echo ""
+	echo "Verify this connection information and try again:"
+	echo "Host: $gpserver"
+	echo "Database: $gpdatabase"
+	echo "Port: $gpport"
+	echo "Username: $gpusername"
+	echo "Password: $gppassword"
+	echo ""
+	echo "##############################################################################################"
+	echo "Installation failed!"
+	echo "##############################################################################################"
+	echo ""
+	exit 1
+fi
+echo ""
+echo "##############################################################################################"
+echo "Validate network connectivity between nodes and this host"
+echo "##############################################################################################"
+
+cd $OSHOME/sql
+
+echo ""
+echo "##############################################################################################"
+echo "Install database components"
+echo "##############################################################################################"
+os_exists=$(psql -t -A -c "SELECT COUNT(*) FROM pg_namespace WHERE nspname = 'os'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+
+#对于存在的schema为os,则进行备份            
+if [ $os_exists = 1 ]; then
+	echo "Notice: os schema already exists"
+	os_type_target_exists=$(psql -t -A -c "SELECT COUNT(*) FROM pg_type t JOIN pg_namespace n on t.typnamespace = n.oid WHERE t.typname = 'type_target' and n.nspname = 'os'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+	if [ $os_type_target_exists -eq 1 ]; then
+		os_create_tables=1
+		echo "Notice: found version 3 of Oracle2GP in os schema" 
+		i=0
+		while [ -z $os_backup_schema ]
+		do
+            i=`expr $i + 1`
+            check=$(psql -t -A -c "SELECT COUNT(*) FROM pg_namespace WHERE nspname = 'os_backup_$i'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+
+            if [ $check = 0 ]; then
+                os_backup_schema=os_backup_$i
+                echo "Notice: backup schema is $os_backup_schema"
+                psql -t -A -c "ALTER SCHEMA OS RENAME TO $os_backup_schema" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport 
+            fi
+		done
+	else 
+		os_create_tables=0
+	fi
+else
+	os_create_tables=1
+	echo "Notice: new install of Oracle2GP"
+fi
+
+ext_exists=$(psql -t -A -c "SELECT COUNT(*) FROM pg_namespace WHERE nspname = 'ext'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+
+if [ $ext_exists = 0 ]; then
+	echo "Notice: creating ext schema"
+	for i in $( ls 01_create_ext_schema_extinstaller.sql ); do
+		psql -f $i -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1
+	done
+else
+	echo "Notice: ext schema already exists"
+fi
+
+if [ $os_create_tables = 1 ]; then
+	#install the sql files
+	echo "Notice: creating tables in the os schema"
+	for i in $( ls *osinstaller.sql ); do
+		table_name=$(echo $i | awk -F 'create_os_table_' '{print $2}' | awk -F '_osinstaller' '{print "ao_"$1}')        
+		for z in $(cat distribution.txt); do 
+			table_name2=$(echo $z | awk -F '|' '{print $2}')
+			if [ "$table_name2" == "$table_name" ]; then
+				distribution=$(echo $z | awk -F '|' '{print $3}')
+			fi
+		done
+		if [ "$VERSION" == "hawq_2" ]; then
+			DISTRIBUTED_BY="DISTRIBUTED RANDOMLY"
+		else 
+			DISTRIBUTED_BY="DISTRIBUTED BY (""$distribution"")"
+		fi
+		psql -f $i -U $gpusername -d $gpdatabase -h $gpserver -p $gpport -v DISTRIBUTED_BY="$DISTRIBUTED_BY" >> $installSQLLog 2>&1
+	done
+else
+	echo "Notice: os schema already exists so skipping table creation"
+fi
+
+echo "Notice: create external table function create/replace"
+for i in $( ls *.variables.sql ); do
+	table_name=$(echo $i | awk -F 'create_' '{print $2}' | awk -F '.' '{print "ao_"$1}')
+	for z in $(cat distribution.txt); do 
+		table_name2=$(echo $z | awk -F '|' '{print $2}')
+		if [ "$table_name2" == "$table_name" ]; then
+			distribution=$(echo $z | awk -F '|' '{print $3}')
+		fi
+	done
+	if [ "$VERSION" == "hawq_2" ]; then
+		DISTRIBUTED_BY="DISTRIBUTED RANDOMLY"
+	else 
+		DISTRIBUTED_BY="DISTRIBUTED BY (""$distribution"")"
+	fi
+	psql -f $i -U $gpusername -d $gpdatabase -h $gpserver -p $gpport -v DISTRIBUTED_BY="$DISTRIBUTED_BY" >> $installSQLLog 2>&1
+done
+
+echo "Notice: creating or replacing objects" 
+for i in $( ls *.replace.sql ); do
+	psql -f $i -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1
+done
+
+echo "Notice: creating or replacing external tables that use gpfdist"
+for i in $( ls *.gpfdist.sql ); do
+	c=`echo $i | awk -F '_' '{print $3}' | awk -F '.' '{print $1}'`
+	psql -f $i -v LOCATION="'gpfdist://$osserver:$OSPORT/foo#transform=$c'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1
+done
+
+if [ "$os_backup_schema" != "" ]; then
+
+	os_schedule_desc_exists=$(psql -t -A -c "SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n on c.relnamespace = n.oid JOIN pg_attribute a on a.attrelid = c.oid WHERE n.nspname = '$os_backup_schema' AND c.relname = 'job' AND a.attname = 'schedule_desc'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+	if [ $os_schedule_desc_exists = 1 ]; then
+		echo "Notice: migrating jobs from 4.x"
+		for i in $( ls *.new_job.upgrade.sql ); do
+			psql -f $i -v os_backup=$os_backup_schema -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1
+		done
+	else
+		echo "Notice: migrating jobs from 3.x" 
+		for i in $( ls *.old_job.upgrade.sql ); do
+			psql -f $i -v os_backup=$os_backup_schema -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1
+		done
+	fi
+
+	echo "Notice: Migrating queue and ext_connection tables from $os_backup_schema to os"
+	for i in $( ls *.remaining.upgrade.sql ); do
+		psql -f $i -v os_backup=$os_backup_schema -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1
+	done
+fi
+
+#New Oracle2GP 5 custom objects
+os_custom_sql_exists=$(psql -t -A -c "SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n on c.relnamespace = n.oid WHERE n.nspname = 'os' AND c.relname = 'ao_custom_sql'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+if [ $os_custom_sql_exists -eq 0 ]; then
+	echo "Notice: Installing Version 5 custom_sql table"
+	for i in $( ls *.install_os5.sql ); do
+		table_name=$(echo $i | awk -F 'create_' '{print $2}' | awk -F '.' '{print "ao_"$1}')
+		for z in $(cat distribution.txt); do 
+			table_name2=$(echo $z | awk -F '|' '{print $2}')
+			if [ "$table_name2" == "$table_name" ]; then
+				distribution=$(echo $z | awk -F '|' '{print $3}')
+			fi
+		done
+		if [ "$VERSION" == "hawq_2" ]; then
+			DISTRIBUTED_BY="DISTRIBUTED RANDOMLY"
+		else 
+			DISTRIBUTED_BY="DISTRIBUTED BY (""$distribution"")"
+		fi
+		psql -f $i -U $gpusername -d $gpdatabase -h $gpserver -p $gpport -v DISTRIBUTED_BY="$DISTRIBUTED_BY" >> $installSQLLog 2>&1 
+	done
+fi
+
+#Make sure custom_sql has gpfdist_port
+os_custom_sql_gpfdist_check=$(psql -t -A -c "SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n on c.relnamespace = n.oid JOIN pg_attribute a on c.oid = a.attrelid WHERE n.nspname = 'os' AND c.relname = 'ao_custom_sql' AND a.attname = 'gpfdist_port'" -U $gpusername -d $gpdatabase -h $gpserver -p $gpport)
+if [ $os_custom_sql_gpfdist_check -eq 0 ]; then
+	echo "Notice: Adding gpfdist_port column to custom_sql table"
+	for i in $( ls *.fix_os5.sql ); do
+		psql -f $i -v osport_custom_lower=$OSPORT_CUSTOM_LOWER -U $gpusername -d $gpdatabase -h $gpserver -p $gpport >> $installSQLLog 2>&1 
+	done
+fi
+
+cd $OSHOME
+
+echo ""
+echo "##############################################################################################"
+echo "Start Oracle2GP"
+echo "##############################################################################################"
+echo "Run stop_all"
+source $PWD/os_path.sh; stop_all
+echo "Run start_all"
+source $PWD/os_path.sh; start_all
+echo ""
+echo "##############################################################################################"
+echo "Basic commands:"
+echo "##############################################################################################"
+echo "start_all / stop_all"
+echo "Starts and stops all background processes for Oracle2GP."
+echo ""
+echo "gpfdistart / gpfdiststop"
+echo "Starts and stops the REQUIRED gpfdist process for the User Interface.  This is used for"
+echo "commands within the user interface.  You can change the port number gpfdist runs on in"
+echo "$PWD/os_path.sh"
+echo "and then re-run this installer."
+echo ""
+echo "uistart / usstop"
+echo "Starts and stops the Oracle2GP User Interface."
+echo "Note: gpfdist must be running for the User Interface to work."
+echo ""
+echo "osstart / osstop"
+echo "Starts and stops the Queue Daemon."
+echo "This is a background process that watches the os.queue table for jobs to execute."
+echo ""
+echo "agentstart / agentstop"
+echo "Starts and stops the Scheduler Daemon."
+echo "This is a background process that will put jobs into the os.queue table to be executed based"
+echo "on the schedule set for the job."
+echo ""
+echo "Database configuration details in $configFile"
+echo "Environment variables are stored in $PWD/os_path.sh"
+echo "Note: You may manually edit these configuration files after installation but it requires"
+echo "restarting the services."
+echo "##############################################################################################"
+echo ""
+echo "##############################################################################################"
+echo "http://$osserver:$UIPORT for Oracle2GP"
+echo "##############################################################################################"
+echo ""
+echo "Be sure to source your .bashrc file after installation or re-login."
+echo ""
