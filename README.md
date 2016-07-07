@@ -41,3 +41,6 @@ source os_path.sh
 bash compile.sh
 
 bash os_install.sh
+
+
+目前基于Oracle 11g和Greenplum 4.3.x.x完全测试。
