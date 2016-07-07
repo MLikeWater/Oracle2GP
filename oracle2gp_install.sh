@@ -6,7 +6,7 @@
 ##################################################################
 set -e
 PWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-source $PWD/os_path.sh
+source $PWD/oracle2gp_path.sh
 configFile=$OSHOME/config.properties
 myHost=`hostname`
 installLog=$OSHOME/log/install.log
