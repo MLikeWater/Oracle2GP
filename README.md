@@ -1,0 +1,2 @@
+# Oracle2GP
+Oracle2GP能够自动实现数据从Oracle迁移到Greenplum或HAWQ数据库
