@@ -10,7 +10,7 @@ Oracle2GP能够自动实现数据从Oracle迁移到Greenplum或HAWQ数据库。
 
 实现的功能如下：
 
-1. 数据库来源为Oracle或SQL Server，其他数据库暂不支持
+1. 数据库来源为Oracle
 
 2. 能够自动将Oracle的DDL转换为Greenplum或HAWQ的语法，并自动在Greenplum中创建指定的schema和table
 
