@@ -168,7 +168,7 @@ public class OutsourcerView
 	public static String viewMain()
 	{
 		String msg = viewHeader("", "", "");
-		msg += "<p><b><i>Oracle2GP</b></i> is an open source, which is supported by Mr.Roberts and Mr.Jiang</br>\n";
+		msg += "<p><b><i>Oracle2GP</b></i> is an open source, which is supported by Mr.Jiang</br>\n";
 		msg += "</p>\n";
 		return msg;
 	}
