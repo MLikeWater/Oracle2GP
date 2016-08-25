@@ -26,7 +26,7 @@ echo "Installation started at: $d"
 echo "Installation started at: $d" > $installSQLLog
 echo ""
 echo "##############################################################################################"
-echo "Reading the default ports from $OSHOME/os_path.sh"
+echo "Reading the default ports from $OSHOME/oracle2gp_path.sh"
 echo "User UI Interface (UIPORT): $UIPORT"
 echo "gpfdist ports:"
 echo "	OSPORT: $OSPORT"
@@ -38,7 +38,7 @@ echo "	OSPORT_CUSTOM_LOWER: $OSPORT_CUSTOM_LOWER"
 echo "	OSPORT_CUSTOM_UPPER: $OSPORT_CUSTOM_UPPER"
 echo ""
 echo "If either of these ports are not acceptable, cancel the installer.  Next, edit"
-echo "$OSHOME/os_path.sh then re-run the installer."
+echo "$OSHOME/oracle2gp_path.sh then re-run the installer."
 echo ""
 echo "If you need to change these values after installation, be sure to re-run this installer."
 echo "##############################################################################################"
@@ -88,7 +88,7 @@ if [ ! -f $OJAR ]; then
 	echo "- Place the ojdbc6.jar file in $OSHOME/jar directory"
 	echo "- Restart Oracle2GP"
 	echo "Note: You can rename the jar file but be sure to set this value with OJAR in:"
-	echo "$OSHOME/os_path.sh"
+	echo "$OSHOME/oracle2gp_path.sh"
 	echo "##############################################################################################"
 	echo ""
 	echo "##############################################################################################"
@@ -220,7 +220,7 @@ echo "Update the .bash_profile file"
 echo "##############################################################################################"
 if [ -f ~/.bash_profile ]; then
 	echo "Making new .bash_profile file"
-	grep -v PGPORT ~/.bash_profile | grep -v os_path | grep -v PGDATABASE > ~/.bash_profile_os
+	grep -v PGPORT ~/.bash_profile | grep -v oracle2gp_path | grep -v PGDATABASE > ~/.bash_profile_os
 	i=0
 	while [ -z $bash_profile_backup ]; do
 		i=`expr $i + 1`
@@ -238,9 +238,9 @@ echo "##########################################################################
 echo "Update the .bashrc file"
 echo "##############################################################################################"
 echo "Making new .bashrc file"
-grep -v os_path.sh ~/.bashrc > ~/.bashrc_os
-echo "Adding source to os_path.sh to your .bashrc file"
-echo "source $OSHOME/os_path.sh" >> ~/.bashrc_os
+grep -v oracle2gp_path.sh ~/.bashrc > ~/.bashrc_os
+echo "Adding source to oracle2gp_path.sh to your .bashrc file"
+echo "source $OSHOME/oracle2gp_path.sh" >> ~/.bashrc_os
 i=0
 while [ -z $bashrc_backup ]; do
     i=`expr $i + 1`
@@ -457,9 +457,9 @@ echo "##########################################################################
 echo "Start Oracle2GP"
 echo "##############################################################################################"
 echo "Run stop_all"
-source $PWD/os_path.sh; stop_all
+source $PWD/oracle2gp_path.sh; stop_all
 echo "Run start_all"
-source $PWD/os_path.sh; start_all
+source $PWD/oracle2gp_path.sh; start_all
 echo ""
 echo "##############################################################################################"
 echo "Basic commands:"
@@ -487,7 +487,7 @@ echo "This is a background process that will put jobs into the os.queue table to
 echo "on the schedule set for the job."
 echo ""
 echo "Database configuration details in $configFile"
-echo "Environment variables are stored in $PWD/os_path.sh"
+echo "Environment variables are stored in $PWD/oracle2gp_path.sh"
 echo "Note: You may manually edit these configuration files after installation but it requires"
 echo "restarting the services."
 echo "##############################################################################################"
