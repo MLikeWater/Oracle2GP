@@ -9,6 +9,7 @@ PWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $PWD/oracle2gp_path.sh
 configFile=$OSHOME/config.properties
 myHost=`hostname`
+mkdir -p $OSHOME/log
 installLog=$OSHOME/log/install.log
 installSQLLog=$OSHOME/log/install_sql.log
 
