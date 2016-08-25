@@ -1,0 +1,34 @@
+#!/bin/bash
+############################################################################################################################
+#
+# Outsourcer stop script.  
+#
+############################################################################################################################
+set -e
+PWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source $PWD/../os_path.sh
+
+echo "Stopping Outsourcer..."
+java -classpath $OSCLASSPATH -Xms$XMS -Xmx$XMX ExternalDataD $CONFIG stop >> $OSLOG
+
+# find the pid for Outsourcer and kill it
+pid=$(ps -ef 2> /dev/null | grep $OSJAR | grep ExternalDataD | grep -v grep | awk '{ print $2 }')
+
+if [ $pid ]; then
+	echo Killing $pid
+	kill $pid
+	sleep 1
+fi
+
+# cleanup orphaned lock file
+rm -rf $JOBLOCK
+
+echo "Outsourcer Queue Daemon has been stopped"
+
+# remove orphaned gpfdist processes from jobs
+
+echo "Stopping orphaned gpfdist processes from jobs"
+jobstopall
+
+echo "Stopping gpfdist processes for custom tables"
+customstopall

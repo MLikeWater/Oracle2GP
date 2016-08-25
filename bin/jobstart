@@ -1,0 +1,60 @@
+#!/bin/bash
+############################################################################################################################
+#
+# Outsourcer gpfdist start script for Jobs
+#       
+############################################################################################################################
+PWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source $PWD/../os_path.sh
+
+pid=0
+count=0
+myport=$OSPORT_LOWER
+mylog=""
+
+# create a lock file so that we only have one gpfdist processing starting/stopping at a time
+lock=false
+while [ "$lock" == "false" ]; do
+	if mkdir $JOBLOCK 2> /dev/null; then
+		#directory got made
+		lock="true"
+	fi
+done
+
+# loop through available ports to find an available gpfdist port
+for myport in `seq $OSPORT_LOWER $OSPORT_UPPER`; do
+	p=`ps -ef 2> /dev/null | grep "$OSHOME" | grep gpfdist | grep -v grep | awk -F ' ' '{print $12}' | grep $myport | wc -l`;
+	if [ "$p" -eq "0" ]; then
+		mylog=$JOBLOG"_$myport".log
+		echo "jobstart:$$:$myport:start requested" >> $mylog
+		gpfdist -d $OSHOME -p $myport -t $GPFDISTTIMEOUT -c $YML -m $GPFDISTMAXROW >> $mylog 2>&1 < $mylog &
+		pid=$!
+	fi
+
+	# check gpfdist process was started
+	if [ "$pid" -ne "0" ]; then
+		sleep 0.4
+		count=`ps -ef 2> /dev/null | grep -v grep | awk -F ' ' '{print $2}' | grep $pid | wc -l`
+		if [ "$count" -eq "1" ]; then
+			echo "jobstart:$$:$myport:started $pid" >> $mylog
+			break
+		else
+			echo "jobstart:$$:$myport:unable to start.  Trying next port...." >> $mylog
+			pid=0
+		fi
+	fi
+done
+# finished loop.  
+
+if [ "$pid" -eq "0" ]; then
+	if [ "$mylog" != "" ]; then
+		echo "jobstart:$$:$myport:Failed to start a gpfdist process" >> $mylog
+	fi
+	myport=0
+fi
+if [ "$mylog" != "" ]; then
+	echo "jobstart:$$:$myport:done" >> $mylog
+fi
+echo $myport
+
+rm -rf $JOBLOCK

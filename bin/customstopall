@@ -1,0 +1,16 @@
+#!/bin/bash
+############################################################################################################################
+#
+# Outsourcer gpfdist custom stop script.
+#
+############################################################################################################################
+set -e
+PWD=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source $PWD/../os_path.sh
+
+for i in `ps -ef 2> /dev/null | grep "$OSHOME" | grep gpfdist | grep -v grep | awk -F ' ' '{print $12}'`; do
+	myport=$i
+	if [[ $myport -ge $OSPORT_CUSTOM_LOWER && $myport -le $OSPORT_CUSTOM_UPPER ]]; then
+		customstop $myport
+	fi
+done
